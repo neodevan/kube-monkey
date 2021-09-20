@@ -31,10 +31,21 @@ func durationToNextRun(runhour int, loc *time.Location) time.Duration {
 	return time.Until(nextRun)
 }
 
-func logPodName() {
-    ctx := datadog.NewDefaultContext(context.Background())
+func logPodName(victimName string) {
+    ctx := datadog.NewDefaultContext(context.WithValue(
+                                             context.Background(),
+                                             datadog.ContextAPIKeys,
+                                             map[string]datadog.APIKey{
+                                                 "apiKeyAuth": {
+                                                     Key: os.Getenv("DD_CLIENT_API_KEY"),
+                                                 },
+                                                 "appKeyAuth": {
+                                                     Key: os.Getenv("DD_CLIENT_APP_KEY"),
+                                                 },
+                                             },
+                                         ))
 
-    body := *datadog.NewEventCreateRequest("Oh boy!", "Did you hear the news today?") // EventCreateRequest | Event request object
+    body := *datadog.NewEventCreateRequest("Victim Name", victimName) // EventCreateRequest | Event request object
 
     configuration := datadog.NewConfiguration()
 
@@ -105,7 +116,7 @@ func ScheduleTerminations(entries []*chaos.Chaos, notificationsClient notificati
 			glog.Errorf("Failed to execute termination for %s %s. Error: %v", result.Victim().Kind(), result.Victim().Name(), result.Error().Error())
 		} else {
 			glog.V(2).Infof("Termination successfully executed for %s %s\n", result.Victim().Kind(), result.Victim().Name())
-			logPodName()
+			logPodName(result.Victim().Name())
 		}
 		if config.NotificationsEnabled() {
 			currentTime := time.Now()
