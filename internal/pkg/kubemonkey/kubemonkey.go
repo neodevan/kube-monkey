@@ -12,6 +12,11 @@ import (
 	"kube-monkey/internal/pkg/kubernetes"
 	"kube-monkey/internal/pkg/notifications"
 	"kube-monkey/internal/pkg/schedule"
+	"context"
+    "encoding/json"
+    "fmt"
+    "os"
+    datadog "github.com/DataDog/datadog-api-client-go/api/v1/datadog"
 )
 
 func durationToNextRun(runhour int, loc *time.Location) time.Duration {
@@ -24,6 +29,35 @@ func durationToNextRun(runhour int, loc *time.Location) time.Duration {
 	nextRun := calendar.NextRuntime(loc, runhour)
 	glog.V(1).Infof("Status Update: Generating next schedule at %s\n", nextRun)
 	return time.Until(nextRun)
+}
+
+func logPodName(victimName string) {
+    ctx := datadog.NewDefaultContext(context.WithValue(
+                                             context.Background(),
+                                             datadog.ContextAPIKeys,
+                                             map[string]datadog.APIKey{
+                                                 "apiKeyAuth": {
+                                                     Key: os.Getenv("DD_CLIENT_API_KEY"),
+                                                 },
+                                                 "appKeyAuth": {
+                                                     Key: os.Getenv("DD_CLIENT_APP_KEY"),
+                                                 },
+                                             },
+                                         ))
+
+    body := *datadog.NewEventCreateRequest("Victim Name", victimName) // EventCreateRequest | Event request object
+
+    configuration := datadog.NewConfiguration()
+
+    apiClient := datadog.NewAPIClient(configuration)
+    resp, r, err := apiClient.EventsApi.CreateEvent(ctx, body)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error when calling `EventsApi.CreateEvent`: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+    }
+    // response from `CreateEvent`: EventCreateResponse
+    responseContent, _ := json.MarshalIndent(resp, "", "  ")
+    fmt.Fprintf(os.Stdout, "Response from EventsApi.CreateEvent:\n%s\n", responseContent)
 }
 
 func Run() error {
@@ -82,6 +116,7 @@ func ScheduleTerminations(entries []*chaos.Chaos, notificationsClient notificati
 			glog.Errorf("Failed to execute termination for %s %s. Error: %v", result.Victim().Kind(), result.Victim().Name(), result.Error().Error())
 		} else {
 			glog.V(2).Infof("Termination successfully executed for %s %s\n", result.Victim().Kind(), result.Victim().Name())
+			logPodName(result.Victim().Name())
 		}
 		if config.NotificationsEnabled() {
 			currentTime := time.Now()

@@ -12,4 +12,5 @@ require (
 	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3
 	k8s.io/client-go v0.21.3
+	github.com/DataDog/datadog-api-client-go/api/v1/datadog
 )
